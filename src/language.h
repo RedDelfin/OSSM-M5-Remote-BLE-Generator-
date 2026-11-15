@@ -18,7 +18,7 @@
 #define T_DEPTH             "Depth:"
 #define T_MM                " mm"
 #define T_STROKE            "Stroke:"
-#define T_SENSATION         "Sensation:"
+#define T_SENSATION         "Sens:"
 #define T_SETUP_DEPTH_I     "Set Depth Interactively"
 #define T_SETUP_DEPTH_F     "Set Depth Fancy"
 #define T_SELECT_PATTERN    "Select Pattern"

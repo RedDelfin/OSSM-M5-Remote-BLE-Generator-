@@ -1,5 +1,5 @@
 // =====================================================================
-//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen7
+//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen8
 //
 //  iPhone (Bluefy + Generator-Seite)  --BLE-->  M5  --ESP-NOW-->  OSSM-Stroke
 //
@@ -83,6 +83,8 @@ static char genMidText[24] = "";
 
 static NimBLECharacteristic* genStChr = nullptr;
 static lv_obj_t* genBanner = nullptr;
+static lv_obj_t* genSensVal = nullptr;   // gen8: Anzeige Sensation-Wert (+/-)
+static int genSensShown = 9999;
 
 class GenSrvCb : public NimBLEServerCallbacks {
   void onConnect(NimBLEServer* s) override {
@@ -238,6 +240,14 @@ static void genSetup() {
   lv_label_set_text(genBanner, "");
   lv_obj_add_flag(genBanner, LV_OBJ_FLAG_HIDDEN);
   strncpy(genMidText, lv_label_get_text(ui_HomeButtonMText), sizeof(genMidText) - 1);
+  // gen8: Sensation-Wert neben "Sens:" anzeigen (wie bei Speed/Depth/Stroke)
+  genSensVal = lv_label_create(ui_SensationL);
+  lv_obj_set_width(genSensVal, LV_SIZE_CONTENT);
+  lv_obj_set_height(genSensVal, LV_SIZE_CONTENT);
+  lv_obj_set_align(genSensVal, LV_ALIGN_LEFT_MID);
+  lv_obj_set_x(genSensVal, 60);
+  lv_obj_set_y(genSensVal, 0);
+  lv_label_set_text(genSensVal, "0");
   genLoopAliveMs = millis();
 }
 
@@ -495,6 +505,15 @@ static void genLoop() {
 // Nach dem Screen-switch: Hand-Aenderungen erkennen und auf die Grenzen kappen
 static void genPostLoop() {
   genHwMx = false;
+  if (genSensVal) {                             // Sensation-Anzeige immer aktuell halten
+    int sv = (int)lroundf(sensation);
+    if (sv != genSensShown) {
+      genSensShown = sv;
+      char b[8];
+      if (sv > 0) snprintf(b, sizeof(b), "+%d", sv); else snprintf(b, sizeof(b), "%d", sv);
+      lv_label_set_text(genSensVal, b);
+    }
+  }
   if (!genActive) return;
   uint8_t ov = genOv;
   bool capped = false;
