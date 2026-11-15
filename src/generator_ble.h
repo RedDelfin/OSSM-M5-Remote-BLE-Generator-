@@ -152,7 +152,7 @@ static void genAbort(const char* reason) {
   if (wasOn) {
     SendCommand(OFF, 0.0, OSSM_ID);
     vibrate(255, 300);
-    String t = String("GENERATOR AUS: ") + reason;
+    String t = String("GENERATOR AUS:\n") + reason;
     genShowBanner(t.c_str(), 0xC62828, 6000);
   } else {
     genHideBanner();
@@ -174,8 +174,8 @@ static void genSoftLoss(const char* reason) {
     genSoftStartMs = millis();
     genSoftSentMs = 0;
   }
-  genShowBanner(wasHold ? "VERBINDUNG WEG - Maschine steht"
-                        : "VERBINDUNG WEG - langsam weiter, Mitte = Stopp",
+  genShowBanner(wasHold ? "VERBINDUNG WEG\nMaschine steht"
+                        : "VERBINDUNG WEG - langsam\nMitte = Stopp",
                 0xC62828, 0);
   LogDebugFormatted("[GEN] Verbindung weg: %s\n", reason);
 }
@@ -186,11 +186,11 @@ static void genToggleHold() {
   if (genHold) {
     SendCommand(OFF, 0.0, OSSM_ID);
     genReason = "Pause an der M5";
-    genShowBanner("PAUSE (M5) - Mitte = weiter", 0xEF6C00, 0);
+    genShowBanner("PAUSE (M5)\nMitte = weiter", 0xEF6C00, 0);
   } else {
     SendCommand(ON, 0.0, OSSM_ID);
     genReason = "weiter an der M5";
-    genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
+    genShowBanner("GENERATOR AKTIV\nMitte = Pause", 0xC62828, 0);
   }
 }
 
@@ -207,7 +207,7 @@ static void genConfirm() {
     genReason = "";
     genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
     genLockTouch(true);
-    genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
+    genShowBanner("GENERATOR AKTIV\nMitte = Pause", 0xC62828, 0);
     vibrate(200, 150);
   } else {
     genAbort("Start nicht moeglich");
@@ -225,8 +225,9 @@ static bool genMidField() {
 // ---------------------------------------------------------------- Setup
 static void genSetup() {
   genBanner = lv_label_create(ui_Home);
-  lv_obj_set_width(genBanner, 300);
-  lv_obj_align(genBanner, LV_ALIGN_TOP_MID, 0, 2);
+  // nur links + Mitte: rechts oben sitzt die Akku-Anzeige (ab x ~233)
+  lv_obj_set_width(genBanner, 224);
+  lv_obj_align(genBanner, LV_ALIGN_TOP_LEFT, 2, 2);
   lv_obj_set_style_bg_opa(genBanner, LV_OPA_COVER, 0);
   lv_obj_set_style_bg_color(genBanner, lv_color_hex(0xC62828), 0);
   lv_obj_set_style_text_color(genBanner, lv_color_hex(0xFFFFFF), 0);
@@ -294,9 +295,9 @@ static void genHandleOne(String c) {
     genReason = "";
     genMidLabel(true);
     if (touch_disabled)
-      genShowBanner("GENERATOR: Touch einschalten, dann BESTAETIGEN tippen", 0xEF6C00, 0);
+      genShowBanner("Touch einschalten,\ndann BESTAETIGEN tippen", 0xEF6C00, 0);
     else
-      genShowBanner("GENERATOR: Feld BESTAETIGEN antippen", 0xEF6C00, 0);
+      genShowBanner("GENERATOR:\nBESTAETIGEN antippen", 0xEF6C00, 0);
     vibrate(200, 150);
     return;
   }
