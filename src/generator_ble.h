@@ -1,5 +1,5 @@
 // =====================================================================
-//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen4
+//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen5
 //
 //  iPhone (Bluefy + Generator-Seite)  --BLE-->  M5  --ESP-NOW-->  OSSM-Stroke
 //
@@ -17,7 +17,7 @@
 //     Block (BLK). Hand-Werte werden auf die Grenzen (LIM) gekappt.
 //   - Linke/rechte Taste und linkes/rechtes Display-Feld werden ignoriert.
 //   - Verbindung weg / Lebenszeichen 2 s weg: Generator aus, Speed in 5 s
-//     sanft auf 15 (Tiefe/Hub bleiben), Maschine laeuft langsam weiter bis
+//     sanft auf 30 (Tiefe/Hub bleiben), Maschine laeuft langsam weiter bis
 //     Eingriff an der M5. Weitermachen: iPhone fragt neu an + Bestaetigen.
 //   - Home-Screen verlassen / OSSM entkoppelt / GEN:0: Maschine AUS.
 //   - Einfrier-Schutz: das ESP-NOW-Lebenszeichen an die OSSM geht nur raus,
@@ -50,7 +50,7 @@
 #define GEN_ARM_TIMEOUT_MS  30000  // so lange wartet "BESTAETIGEN"
 #define GEN_STATUS_MS       500
 #define GEN_SOFT_MS         5000   // sanft runter in 5 s
-#define GEN_SOFT_SPEED      15.0f  // ... auf diesen Speed
+#define GEN_SOFT_SPEED      30.0f  // ... auf diesen Speed (15 hatte zu wenig Moment)
 #define GEN_ALIVE_MS        2000   // Einfrier-Schutz
 
 // ---------- zwischen Tasks geteilt ----------
