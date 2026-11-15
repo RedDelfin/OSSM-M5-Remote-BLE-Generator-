@@ -71,7 +71,7 @@ select{width:auto}
 
 <div class="card">
  <div class="k">2 · Generator starten</div>
- <div class="mut" style="margin:6px 0">M5 muss gekoppelt sein und im Home-Screen stehen. Nach „Anfragen“ an der M5 die <b>Mitte-Taste</b> drücken.</div>
+ <div class="mut" style="margin:6px 0">M5 muss gekoppelt sein und im Home-Screen stehen. Nach „Anfragen“ auf dem M5-Display das mittlere Feld <b>BESTAETIGEN</b> antippen (Touch muss an sein). Die Hardware-Mitte bestätigt nie.</div>
  <div class="row">
   <button id="bArm" disabled>Anfragen</button>
   <button class="sec" id="bEnd" disabled>Beenden</button>
@@ -105,11 +105,13 @@ select{width:auto}
 <div class="card">
  <div class="k">4 · Sicherheitstests</div>
  <div class="mut" style="margin:6px 0">Jeweils bei laufender Maschine mit niedrigem Speed testen:</div>
- <div class="mut">a) <b>Lebenszeichen aus</b>: M5 muss nach ca. 2 s stoppen („kein Lebenszeichen“).<br>
- b) <b>Trennen</b> oder Bluetooth am iPhone aus: M5 stoppt sofort.<br>
+ <div class="mut">a) <b>Lebenszeichen aus</b>: nach ca. 2 s Generator aus, Speed fährt in 5 s auf 15, Maschine läuft langsam weiter. Hardware-Mitte = Stopp.<br>
+ b) <b>Trennen</b> oder Bluetooth am iPhone aus: sofort Generator aus, sanft runter auf 15 wie bei a).<br>
  c) <b>Mitte-Taste an der M5</b>: Maschine stoppt, Generator bleibt aktiv („PAUSE (M5)“). „Maschine AN“ von hier wird ignoriert. Erneut Mitte = weiter.<br>
  d) <b>Encoder drehen</b>: Wert ändert sich, Generator bleibt aktiv, hier erscheint „Von Hand …“. Senden für diesen Wert wird ignoriert, bis „Neuer Block“.<br>
- e) <b>Bluefy in den Hintergrund</b> (Home-Taste): M5 stoppt nach ca. 2 s.</div>
+ e) <b>Bluefy in den Hintergrund</b> (Home-Taste): wie a).<br>
+ f) <b>Grenze</b>: im Generator am Encoder über die Test-Grenze drehen – M5 kappt und vibriert kurz.<br>
+ g) <b>M5 ausschalten</b>: OSSM stoppt nach ca. 5 s von selbst.</div>
  <div class="row" style="margin-top:8px">
   <label><input type="checkbox" id="hbOff" style="width:auto"> Lebenszeichen aus (Test a)</label>
  </div>
@@ -150,7 +152,7 @@ function write(txt){
 function onStatus(ev){
  let j;try{j=JSON.parse(dec.decode(ev.target.value))}catch(e){return}
  last=j;lastStMs=Date.now();
- pill('gen',j.g?(j.hold?'PAUSE (M5)':'AKTIV'):j.a?'Mitte drücken':'aus',j.g?(j.hold?'wait':'on'):j.a?'wait':'off');
+ pill('gen',j.g?(j.hold?'PAUSE (M5)':'AKTIV'):j.a?(j.t?'BESTAETIGEN tippen':'Touch an der M5 einschalten'):j.rmp?'aus – sanft runter':'aus',j.g?(j.hold?'wait':'on'):j.a?'wait':'off');
  {const o=j.ov|0,n=[];if(o&1)n.push('Speed');if(o&2)n.push('Tiefe');if(o&4)n.push('Hub');if(o&8)n.push('Sensation');$('ov').textContent=n.length?'Von Hand an der M5 (bis Blockende): '+n.join(', '):''}
  pill('mon',j.on?'läuft':'aus',j.on?'on':'off');
  $('vs').textContent=j.s;$('vd').textContent=j.d;$('vh').textContent=j.h;$('vx').textContent=j.x;
@@ -195,7 +197,7 @@ $('bConn').onclick=connect;
 $('bDisc').onclick=()=>{try{dev&&dev.gatt.disconnect()}catch(e){}};
 $('bArm').onclick=async()=>{
  const l=['S','D','H'].map(k=>k+'='+Math.max(1,+$('l'+k).value||1)).join(',');
- await write('LIM:'+l);await write('GEN:1');log('Jetzt an der M5 die Mitte-Taste drücken.');
+ await write('LIM:'+l);await write('GEN:1');log('Jetzt auf dem M5-Display BESTAETIGEN antippen.');
 };
 $('bEnd').onclick=()=>write('GEN:0');
 $('bOn').onclick=()=>write('ON');
