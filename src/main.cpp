@@ -488,6 +488,7 @@ void screenmachine(lv_event_t * e)
 }
 
 void ejectcreampie(lv_event_t * e){
+  if(genActive) return;   // Generator: linkes Feld ignorieren
   if(EJECT_On == true){
     lv_obj_clear_state(ui_HomeButtonL, LV_STATE_CHECKED);
     EJECT_On = false;
@@ -514,6 +515,7 @@ void savepattern(lv_event_t * e){
 
 void homebuttonmevent(lv_event_t * e){
   LogDebug("HomeButton");
+  if(genActive){ genToggleHold(); return; }   // Generator: Mitte-Feld = Pause/weiter
   if(OSSM_On == false){
     SendCommand(ON, 0.0, OSSM_ID);
   } else if(OSSM_On == true){

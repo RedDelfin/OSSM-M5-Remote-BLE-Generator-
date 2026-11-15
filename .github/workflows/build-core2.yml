@@ -25,7 +25,7 @@ jobs:
       - name: Datei benennen
         run: |
           mkdir -p out
-          cp .pio/build/m5stack-core2/merged-flash.bin out/OSSM-M5-Remote_core2_2-2-0-gen2_FLASH-AT-0x0.bin
+          cp .pio/build/m5stack-core2/merged-flash.bin out/OSSM-M5-Remote_core2_2-2-0-gen3_FLASH-AT-0x0.bin
           md5sum out/*.bin
       - name: Firmware hochladen
         uses: actions/upload-artifact@v4

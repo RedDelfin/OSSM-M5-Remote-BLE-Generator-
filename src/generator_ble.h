@@ -118,6 +118,26 @@ static void genHideBanner() {
   genBannerUntil = 0;
 }
 
+// Pause / weiter (Hardware-Mitte-Taste oder Mitte-Feld auf dem Display)
+static void genToggleHold() {
+  genHold = !genHold;
+  if (genHold) {
+    SendCommand(OFF, 0.0, OSSM_ID);
+    genReason = "Pause an der M5";
+    genShowBanner("PAUSE (M5) - Mitte = weiter", 0xEF6C00, 0);
+  } else {
+    SendCommand(ON, 0.0, OSSM_ID);
+    genReason = "weiter an der M5";
+    genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
+  }
+}
+
+// Rechtes Display-Feld (Pattern/Menue) sperren, solange der Generator laeuft
+static void genLockTouch(bool lock) {
+  if (lock) lv_obj_add_state(ui_HomeButtonR, LV_STATE_DISABLED);
+  else lv_obj_clear_state(ui_HomeButtonR, LV_STATE_DISABLED);
+}
+
 // Modus beenden: Maschine aus, Grund merken, Banner zeigen
 static void genAbort(const char* reason) {
   bool wasOn = genActive;
@@ -125,6 +145,7 @@ static void genAbort(const char* reason) {
   genArmed = false;
   genHold = false;
   genOv = 0;
+  genLockTouch(false);
   genReason = reason;
   if (wasOn) {
     SendCommand(OFF, 0.0, OSSM_ID);
@@ -319,6 +340,7 @@ static void genLoop() {
         genOv = 0;
         genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
         genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
+        genLockTouch(true);
       } else {
         genAbort("Start nicht moeglich");
       }
@@ -337,16 +359,7 @@ static void genLoop() {
   if (genActive) {
     if (mxclick_short_waspressed) {            // Mitte = Pause / weiter
       mxclick_short_waspressed = false;
-      genHold = !genHold;
-      if (genHold) {
-        SendCommand(OFF, 0.0, OSSM_ID);
-        genReason = "Pause an der M5";
-        genShowBanner("PAUSE (M5) - Mitte = weiter", 0xEF6C00, 0);
-      } else {
-        SendCommand(ON, 0.0, OSSM_ID);
-        genReason = "weiter an der M5";
-        genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
-      }
+      genToggleHold();
     }
     // linke/rechte Taste ignorieren (kein Menue, kein Eject, kein Sensation-Reset)
     mxclick_long_waspressed = false;
