@@ -1,4 +1,10 @@
 # Project OSSM M5 REMOTE
+
+# Changes:
+The idear of this project was, the abbility to generate the values via html script / generator. This generator is played via phone und bluefy. 
+The phone communicatis via BLE with the M5 and the M5 communicates via ESP Now with the OSSM and Stroke Ossm firmware. 
+
+
 ## Overview of the OSSM-M5-Remote
 
 A Remote Control Platform for all ESP Controlled Sex Toys,with a focus on the [OSSM](https://github.com/KinkyMakers/OSSM-hardware) and related toys.
