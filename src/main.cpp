@@ -515,7 +515,7 @@ void savepattern(lv_event_t * e){
 
 void homebuttonmevent(lv_event_t * e){
   LogDebug("HomeButton");
-  if(genActive){ genToggleHold(); return; }   // Generator: Mitte-Feld = Pause/weiter
+  if(genMidField()) return;   // Generator: Bestaetigen per Touch / Feld waehrend Generator ohne Funktion
   if(OSSM_On == false){
     SendCommand(ON, 0.0, OSSM_ID);
   } else if(OSSM_On == true){
@@ -1076,7 +1076,9 @@ void loop()
 void espNowRemoteTask(void *pvParameters)
 {
   for(;;){
-    if(Ossm_paired){
+    // Einfrier-Schutz (Generator): Lebenszeichen nur, wenn loop() in den letzten 2 s lief.
+    // Haengt die M5, bleibt es aus und die OSSM stoppt nach ca. 5 s von selbst.
+    if(Ossm_paired && (millis() - genLoopAliveMs) < GEN_ALIVE_MS){
       outgoingcontrol.esp_command = HEARTBEAT;
       outgoingcontrol.esp_heartbeat = true;
       outgoingcontrol.esp_target = OSSM_ID;

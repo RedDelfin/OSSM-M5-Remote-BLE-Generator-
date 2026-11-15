@@ -1,5 +1,5 @@
 // =====================================================================
-//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)
+//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen4
 //
 //  iPhone (Bluefy + Generator-Seite)  --BLE-->  M5  --ESP-NOW-->  OSSM-Stroke
 //
@@ -7,40 +7,37 @@
 //  SendCommand()-Funktion an die OSSM, genau wie beim Drehen am Encoder.
 //  Einheiten = die Werte, die auch auf dem M5-Display stehen.
 //
-//  Sicherheit / Bedienung (v2: gen2):
-//   - Aktivieren nur im Home-Screen und nur nach Bestaetigung an der M5
-//     (Mitte-Taste druecken).
-//   - Beenden des Generators NUR ueber die Seite (GEN:0) - oder automatisch:
-//     Lebenszeichen 2 s weg / BLE getrennt / Home-Screen verlassen -> OFF + aus.
-//   - Mitte-Taste waehrend des Generators = PAUSE (Maschine AUS, Generator
-//     bleibt aktiv). Erneut Mitte = weiter (Maschine AN). Solange pausiert,
-//     ignoriert die M5 ein ON vom iPhone.
-//   - Encoder/Slider (Speed, Tiefe, Hub, Sensation) hoch UND runter erlaubt:
-//     der Hand-Wert gilt bis zum naechsten Block (BLK), Generator-Werte fuer
-//     diesen Parameter werden bis dahin ignoriert.
-//   - Linke/rechte Taste (kurz, lang, doppelt) werden ignoriert.
-//   - Grenzen (LIM) fuer Speed/Tiefe/Hub gelten fuer Generator-Werte.
-//   - Werte werden nur angenommen, solange der Modus aktiv ist.
+//  Bedienung / Sicherheit (Regeln aus dem Grill-me, 15.11.2026):
+//   - Start: iPhone fragt an (GEN:1), Bestaetigen NUR per Touch auf das
+//     mittlere Display-Feld ("BESTAETIGEN"). Die Hardware-Mitte bestaetigt nie.
+//   - Hardware-Mitte waehrend des Generators = PAUSE (Maschine AUS, Generator
+//     bleibt aktiv), erneut = weiter. Solange pausiert, wird ON vom iPhone
+//     ignoriert. Das mittlere Display-Feld tut waehrend des Generators nichts.
+//   - Encoder/Slider hoch und runter erlaubt; Hand-Wert gilt bis zum naechsten
+//     Block (BLK). Hand-Werte werden auf die Grenzen (LIM) gekappt.
+//   - Linke/rechte Taste und linkes/rechtes Display-Feld werden ignoriert.
+//   - Verbindung weg / Lebenszeichen 2 s weg: Generator aus, Speed in 5 s
+//     sanft auf 15 (Tiefe/Hub bleiben), Maschine laeuft langsam weiter bis
+//     Eingriff an der M5. Weitermachen: iPhone fragt neu an + Bestaetigen.
+//   - Home-Screen verlassen / OSSM entkoppelt / GEN:0: Maschine AUS.
+//   - Einfrier-Schutz: das ESP-NOW-Lebenszeichen an die OSSM geht nur raus,
+//     solange loop() laeuft (genLoopAliveMs). Haengt die M5, stoppt die OSSM
+//     nach ca. 5 s von selbst.
 //
 //  Befehle (Text, mehrere mit ';' oder Zeilenumbruch getrennt):
-//   GEN:1            Modus anfragen (M5 zeigt "Mitte druecken")
-//   GEN:0            Modus beenden (OFF)
+//   GEN:1            Modus anfragen (M5 zeigt "BESTAETIGEN")
+//   GEN:0            Modus beenden (Maschine AUS)
 //   PING             Lebenszeichen (jeder Schreibzugriff zaehlt auch)
-//   S:<wert>         Speed
-//   D:<wert>         Tiefe
-//   H:<wert>         Hub (Stroke), nie groesser als Tiefe
-//   X:<wert>         Sensation -100..100
+//   S:<wert> D:<wert> H:<wert> X:<wert>   Speed / Tiefe / Hub / Sensation
 //   P:<index>        Pattern (0 SimpleStroke, 1 TeasingPounding, 2 RoboStroke,
 //                    3 HalfnHalf, 4 Deeper, 5 StopNGo, 6 Insist, 7 Knot)
 //   ON / OFF         Maschine an / aus (ON wird bei M5-Pause ignoriert)
-//   BLK              neuer Block: Hand-Werte verfallen, Generator-Werte gelten wieder
-//   LIM:S=<v>,D=<v>,H=<v>   Grenzen setzen (nur wenn Modus nicht aktiv)
+//   BLK              neuer Block: Hand-Werte verfallen
+//   LIM:S=<v>,D=<v>,H=<v>   Grenzen (jederzeit, gelten fuer Generator- und Hand-Werte)
 //
 //  Status (Notify/Read, JSON), ca. alle 500 ms:
-//   {"p":gekoppelt,"g":modus,"a":wartet_auf_bestaetigung,"on":OSSM_On,
-//    "s":speed,"d":depth,"h":stroke,"x":sensation,"pt":pattern,
-//    "ms":speedlimit,"md":maxdepth,"ls":..,"ld":..,"lh":..,"r":"grund","b":akku,
-//    "hold":Pause_an_M5,"ov":Hand-Bitmaske(1 Speed,2 Tiefe,4 Hub,8 Sensation)}
+//   {"p","g","a","on","s","d","h","x","pt","ms","md","ls","ld","lh","r","b",
+//    "hold","ov"(1 Speed,2 Tiefe,4 Hub,8 Sensation),"rmp"(sanft runter aktiv),"t"(Touch an)}
 // =====================================================================
 #pragma once
 #include <NimBLEDevice.h>
@@ -49,17 +46,21 @@
 #define GEN_CMD_UUID  "6f73736d-6765-6e00-8000-00805f9b0002"
 #define GEN_ST_UUID   "6f73736d-6765-6e00-8000-00805f9b0003"
 
-#define GEN_TIMEOUT_MS      2000   // Lebenszeichen
-#define GEN_ARM_TIMEOUT_MS  15000  // so lange wartet "Mitte druecken"
+#define GEN_TIMEOUT_MS      2000   // Lebenszeichen iPhone
+#define GEN_ARM_TIMEOUT_MS  30000  // so lange wartet "BESTAETIGEN"
 #define GEN_STATUS_MS       500
+#define GEN_SOFT_MS         5000   // sanft runter in 5 s
+#define GEN_SOFT_SPEED      15.0f  // ... auf diesen Speed
+#define GEN_ALIVE_MS        2000   // Einfrier-Schutz
 
-// ---------- zwischen BLE-Task und loop() geteilt ----------
+// ---------- zwischen Tasks geteilt ----------
 static portMUX_TYPE genMux = portMUX_INITIALIZER_UNLOCKED;
 static volatile uint32_t genLastRxMs = 0;
 static volatile bool genBleConnected = false;
-static volatile bool genBleLost = false;     // Verbindung abgerissen
+static volatile bool genBleLost = false;
+volatile uint32_t genLoopAliveMs = 0;         // von loop() gesetzt, vom ESP-NOW-Task gelesen
 #define GEN_RX_MAX 512
-static char genRx[GEN_RX_MAX];                // eingegangene Befehle (geschuetzt durch genMux, kein malloc im kritischen Abschnitt)
+static char genRx[GEN_RX_MAX];                // eingegangene Befehle (kein malloc im kritischen Abschnitt)
 static size_t genRxLen = 0;
 
 // ---------- nur in loop() ----------
@@ -71,9 +72,14 @@ static uint32_t genStatusMs = 0;
 static uint32_t genBannerUntil = 0;
 static String genReason = "";
 static float genLimS = 1e9, genLimD = 1e9, genLimH = 1e9;
-static bool genHold = false;            // Pause per Mitte-Taste
-static uint8_t genOv = 0;               // Hand-Werte im aktuellen Block
+static bool genHold = false;
+static uint8_t genOv = 0;
 static float genSnapS = 0, genSnapD = 0, genSnapH = 0, genSnapX = 0;
+static bool genHwMx = false;                  // Hardware-Mitte in diesem loop-Durchlauf gedrueckt
+static bool genSoft = false;                  // sanft runter laeuft
+static uint32_t genSoftStartMs = 0, genSoftSentMs = 0;
+static float genSoftFrom = 0;
+static char genMidText[24] = "";
 
 static NimBLECharacteristic* genStChr = nullptr;
 static lv_obj_t* genBanner = nullptr;
@@ -105,6 +111,7 @@ class GenCmdCb : public NimBLECharacteristicCallbacks {
   }
 };
 
+// ---------------------------------------------------------------- Anzeige
 static void genShowBanner(const char* txt, uint32_t color, uint32_t forMs) {
   if (!genBanner) return;
   lv_label_set_text(genBanner, txt);
@@ -112,13 +119,68 @@ static void genShowBanner(const char* txt, uint32_t color, uint32_t forMs) {
   lv_obj_clear_flag(genBanner, LV_OBJ_FLAG_HIDDEN);
   genBannerUntil = forMs ? millis() + forMs : 0;
 }
-
 static void genHideBanner() {
   if (genBanner) lv_obj_add_flag(genBanner, LV_OBJ_FLAG_HIDDEN);
   genBannerUntil = 0;
 }
+static void genMidLabel(bool confirm) {
+  if (confirm) lv_label_set_text(ui_HomeButtonMText, "BESTAETIGEN");
+  else if (genMidText[0]) lv_label_set_text(ui_HomeButtonMText, genMidText);
+}
+// Rechtes Display-Feld (Pattern/Menue) sperren, solange der Generator laeuft
+static void genLockTouch(bool lock) {
+  if (lock) lv_obj_add_state(ui_HomeButtonR, LV_STATE_DISABLED);
+  else lv_obj_clear_state(ui_HomeButtonR, LV_STATE_DISABLED);
+}
 
-// Pause / weiter (Hardware-Mitte-Taste oder Mitte-Feld auf dem Display)
+// ---------------------------------------------------------------- Zustaende
+static void genEndCommon() {
+  genActive = false;
+  genArmed = false;
+  genHold = false;
+  genOv = 0;
+  genLockTouch(false);
+  genMidLabel(false);
+}
+
+// Hartes Ende: Maschine AUS (GEN:0, Home verlassen, OSSM entkoppelt)
+static void genAbort(const char* reason) {
+  bool wasOn = genActive;
+  genEndCommon();
+  genSoft = false;
+  genReason = reason;
+  if (wasOn) {
+    SendCommand(OFF, 0.0, OSSM_ID);
+    vibrate(255, 300);
+    String t = String("GENERATOR AUS: ") + reason;
+    genShowBanner(t.c_str(), 0xC62828, 6000);
+  } else {
+    genHideBanner();
+  }
+  LogDebugFormatted("[GEN] Ende: %s\n", reason);
+}
+
+// Weiches Ende bei Verbindungsverlust: Speed in 5 s auf 15, Maschine laeuft weiter
+static void genSoftLoss(const char* reason) {
+  bool wasOn = genActive;
+  bool wasHold = genHold;
+  genEndCommon();
+  genReason = reason;
+  if (!wasOn) { genHideBanner(); return; }
+  vibrate(255, 300);
+  if (!wasHold && speed > GEN_SOFT_SPEED) {
+    genSoft = true;
+    genSoftFrom = speed;
+    genSoftStartMs = millis();
+    genSoftSentMs = 0;
+  }
+  genShowBanner(wasHold ? "VERBINDUNG WEG - Maschine steht"
+                        : "VERBINDUNG WEG - langsam weiter, Mitte = Stopp",
+                0xC62828, 0);
+  LogDebugFormatted("[GEN] Verbindung weg: %s\n", reason);
+}
+
+// Pause / weiter (nur Hardware-Mitte)
 static void genToggleHold() {
   genHold = !genHold;
   if (genHold) {
@@ -132,34 +194,36 @@ static void genToggleHold() {
   }
 }
 
-// Rechtes Display-Feld (Pattern/Menue) sperren, solange der Generator laeuft
-static void genLockTouch(bool lock) {
-  if (lock) lv_obj_add_state(ui_HomeButtonR, LV_STATE_DISABLED);
-  else lv_obj_clear_state(ui_HomeButtonR, LV_STATE_DISABLED);
-}
-
-// Modus beenden: Maschine aus, Grund merken, Banner zeigen
-static void genAbort(const char* reason) {
-  bool wasOn = genActive;
-  genActive = false;
+// Bestaetigung per Touch auf das mittlere Display-Feld
+static void genConfirm() {
   genArmed = false;
-  genHold = false;
-  genOv = 0;
-  genLockTouch(false);
-  genReason = reason;
-  if (wasOn) {
-    SendCommand(OFF, 0.0, OSSM_ID);
-    vibrate(255, 300);
-    String t = String("GENERATOR AUS: ") + reason;
-    genShowBanner(t.c_str(), 0xC62828, 6000);
+  genMidLabel(false);
+  if (st_screens == ST_UI_HOME && Ossm_paired && genBleConnected) {
+    genActive = true;
+    genSoft = false;
+    genHold = false;
+    genOv = 0;
+    genLastRxMs = millis();
+    genReason = "";
+    genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
+    genLockTouch(true);
+    genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
+    vibrate(200, 150);
   } else {
-    genHideBanner();
+    genAbort("Start nicht moeglich");
   }
-  LogDebugFormatted("[GEN] abort: %s\n", reason);
 }
 
+// Aufruf aus homebuttonmevent() (mittleres Feld, Touch ODER per Hardware-Mitte ausgeloest).
+// Rueckgabe true = Ereignis vom Generator verbraucht.
+static bool genMidField() {
+  if (genActive) return true;                   // waehrend des Generators: Feld tut nichts
+  if (genArmed && !genHwMx) { genConfirm(); return true; }  // nur Touch bestaetigt
+  return false;                                 // normales Start/Stopp
+}
+
+// ---------------------------------------------------------------- Setup
 static void genSetup() {
-  // Banner auf dem Home-Screen (unsichtbar, bis gebraucht)
   genBanner = lv_label_create(ui_Home);
   lv_obj_set_width(genBanner, 300);
   lv_obj_align(genBanner, LV_ALIGN_TOP_MID, 0, 2);
@@ -170,6 +234,8 @@ static void genSetup() {
   lv_obj_set_style_pad_all(genBanner, 4, 0);
   lv_label_set_text(genBanner, "");
   lv_obj_add_flag(genBanner, LV_OBJ_FLAG_HIDDEN);
+  strncpy(genMidText, lv_label_get_text(ui_HomeButtonMText), sizeof(genMidText) - 1);
+  genLoopAliveMs = millis();
 }
 
 // BLE erst starten, wenn ESP-NOW gekoppelt ist (BLE stoert sonst die Kopplung)
@@ -193,6 +259,7 @@ static void genBleInit() {
   LogDebug("[GEN] BLE gestartet");
 }
 
+// ---------------------------------------------------------------- Befehle
 static float genClamp(float v, float lo, float hi) {
   if (isnan(v)) return lo;
   if (v < lo) return lo;
@@ -225,14 +292,21 @@ static void genHandleOne(String c) {
     genArmed = true;
     genArmedMs = millis();
     genReason = "";
-    genShowBanner("GENERATOR: Mitte druecken zum Starten", 0xEF6C00, 0);
+    genMidLabel(true);
+    if (touch_disabled)
+      genShowBanner("GENERATOR: Touch einschalten, dann BESTAETIGEN tippen", 0xEF6C00, 0);
+    else
+      genShowBanner("GENERATOR: Feld BESTAETIGEN antippen", 0xEF6C00, 0);
     vibrate(200, 150);
     return;
   }
-  if (u == "GEN:0") { genAbort("vom iPhone beendet"); return; }
+  if (u == "GEN:0") {
+    if (genArmed && !genActive) { genEndCommon(); genHideBanner(); genReason = "Anfrage zurueckgezogen"; return; }
+    genAbort("vom iPhone beendet");
+    return;
+  }
 
-  if (u.startsWith("LIM:")) {
-    if (genActive) return;  // waehrend der Session keine Aenderung
+  if (u.startsWith("LIM:")) {                   // jederzeit erlaubt
     String r = u.substring(4);
     int p = 0;
     while (p < (int)r.length()) {
@@ -254,12 +328,13 @@ static void genHandleOne(String c) {
     return;
   }
 
-  if (!genActive) return;  // Bewegungsbefehle nur im aktiven Modus
+  if (!genActive) return;                       // Bewegungsbefehle nur im aktiven Modus
 
   if (u == "BLK") { genOv = 0; return; }
-  if (u == "ON")  {
+  if (u == "ON") {
     if (genHold) { genReason = "an der M5 pausiert"; return; }
-    SendCommand(ON, 0.0, OSSM_ID); return;
+    SendCommand(ON, 0.0, OSSM_ID);
+    return;
   }
   if (u == "OFF") { SendCommand(OFF, 0.0, OSSM_ID); return; }
 
@@ -300,84 +375,88 @@ static void genHandleOne(String c) {
 
 static void genSendStatus() {
   if (!genStChr) return;
-  char buf[300];
+  char buf[340];
   snprintf(buf, sizeof(buf),
            "{\"p\":%d,\"g\":%d,\"a\":%d,\"on\":%d,\"s\":%.0f,\"d\":%.0f,\"h\":%.0f,\"x\":%.0f,"
            "\"pt\":%d,\"ms\":%.0f,\"md\":%.0f,\"ls\":%.0f,\"ld\":%.0f,\"lh\":%.0f,\"r\":\"%s\",\"b\":%d,"
-           "\"hold\":%d,\"ov\":%d}",
+           "\"hold\":%d,\"ov\":%d,\"rmp\":%d,\"t\":%d}",
            Ossm_paired ? 1 : 0, genActive ? 1 : 0, genArmed ? 1 : 0, OSSM_On ? 1 : 0,
            speed, depth, stroke, sensation, pattern, speedlimit, maxdepthinmm,
            genLimS > 1e8 ? -1.0f : genLimS, genLimD > 1e8 ? -1.0f : genLimD, genLimH > 1e8 ? -1.0f : genLimH,
-           genReason.c_str(), (int)M5.Power.getBatteryLevel(), genHold ? 1 : 0, (int)genOv);
+           genReason.c_str(), (int)M5.Power.getBatteryLevel(),
+           genHold ? 1 : 0, (int)genOv, genSoft ? 1 : 0, touch_disabled ? 0 : 1);
   genStChr->setValue((uint8_t*)buf, strlen(buf));
   if (genBleConnected) genStChr->notify();
 }
 
-// Muss in loop() VOR dem Screen-switch laufen (Encoder-Zaehler noch unverbraucht)
+// ---------------------------------------------------------------- loop-Teil 1
+// Muss in loop() VOR dem Screen-switch laufen (Tasten/Encoder noch unverbraucht)
 static void genLoop() {
+  const uint32_t now = millis();
+  genLoopAliveMs = now;                         // Einfrier-Schutz: loop laeuft
+  genHwMx = mxclick_short_waspressed;
+
   if (!genBleStarted) {
     if (Ossm_paired) genBleInit();
     return;
   }
-  const uint32_t now = millis();
 
-  // 1) Verbindung weg?
+  // 1) Verbindung weg / Lebenszeichen weg -> weich
   if (genBleLost) {
     genBleLost = false;
-    if (genActive || genArmed) genAbort("Bluetooth getrennt");
+    if (genActive) genSoftLoss("Bluetooth getrennt");
+    else if (genArmed) { genEndCommon(); genHideBanner(); genReason = "Bluetooth getrennt"; }
   }
+  if (genActive && now - genLastRxMs > GEN_TIMEOUT_MS) genSoftLoss("kein Lebenszeichen");
 
-  // 2) Bestaetigung an der M5 (Mitte-Taste) - der Klick wird verbraucht
+  // 2) Wartet auf Bestaetigung: Zeitlimit, Ablehnen mit linker/rechter Taste
   if (genArmed) {
-    if (mxclick_short_waspressed) {
-      mxclick_short_waspressed = false;
-      genArmed = false;
-      if (st_screens == ST_UI_HOME && Ossm_paired && genBleConnected) {
-        genActive = true;
-        genLastRxMs = now;
-        genReason = "";
-        genHold = false;
-        genOv = 0;
-        genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
-        genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
-        genLockTouch(true);
-      } else {
-        genAbort("Start nicht moeglich");
-      }
-    } else if (now - genArmedMs > GEN_ARM_TIMEOUT_MS) {
-      genArmed = false;
-      genReason = "nicht bestaetigt";
-      genHideBanner();
+    if (now - genArmedMs > GEN_ARM_TIMEOUT_MS) {
+      genEndCommon(); genHideBanner(); genReason = "nicht bestaetigt";
     } else if (click2_short_waspressed || click3_short_waspressed) {
-      genArmed = false;
-      genReason = "an der M5 abgelehnt";
-      genHideBanner();
+      click2_short_waspressed = false;
+      click3_short_waspressed = false;
+      genEndCommon(); genHideBanner(); genReason = "an der M5 abgelehnt";
     }
   }
 
   // 3) Bedienung an der M5 waehrend des Generators
   if (genActive) {
-    if (mxclick_short_waspressed) {            // Mitte = Pause / weiter
+    if (mxclick_short_waspressed) {             // Hardware-Mitte = Pause / weiter
       mxclick_short_waspressed = false;
       genToggleHold();
     }
-    // linke/rechte Taste ignorieren (kein Menue, kein Eject, kein Sensation-Reset)
-    mxclick_long_waspressed = false;
+    mxclick_long_waspressed = false;            // alles andere ignorieren
     click2_short_waspressed = false;
     click3_short_waspressed = false;
     click3_long_waspressed = false;
     click3_double_waspressed = false;
 
-    if (st_screens != ST_UI_HOME) {
-      genAbort("Home-Screen verlassen");
-    } else if (!Ossm_paired) {
-      genAbort("OSSM nicht gekoppelt");
-    } else if (now - genLastRxMs > GEN_TIMEOUT_MS) {
-      genAbort("kein Lebenszeichen");
+    if (st_screens != ST_UI_HOME) genAbort("Home-Screen verlassen");
+    else if (!Ossm_paired) genAbort("OSSM nicht gekoppelt");
+  }
+
+  // 4) Sanft runter nach Verbindungsverlust
+  if (genSoft) {
+    bool input = abs(encoder1.getCount()) >= 2 || mxclick_short_waspressed ||
+                 lv_slider_is_dragged(ui_homespeedslider);
+    if (input || !Ossm_paired) {
+      genSoft = false;                          // Mensch uebernimmt
+    } else {
+      float t = (float)(now - genSoftStartMs) / GEN_SOFT_MS;
+      if (t > 1) t = 1;
+      float target = genSoftFrom + (GEN_SOFT_SPEED - genSoftFrom) * t;
+      target = roundf(target);
+      if (target < speed && now - genSoftSentMs >= 200) {
+        speed = target;
+        SendCommand(SPEED, speed, OSSM_ID);
+        genSoftSentMs = now;
+      }
+      if (t >= 1 && speed <= GEN_SOFT_SPEED) genSoft = false;
     }
   }
 
-  // 4) eingegangene Befehle abarbeiten (im loop-Kontext: LVGL + ESP-NOW sicher)
+  // 5) eingegangene Befehle abarbeiten (im loop-Kontext: LVGL + ESP-NOW sicher)
   static char local[GEN_RX_MAX + 1];
   size_t ln;
   portENTER_CRITICAL(&genMux);
@@ -386,8 +465,8 @@ static void genLoop() {
   genRxLen = 0;
   portEXIT_CRITICAL(&genMux);
   local[ln] = 0;
-  String batch = String(local);
-  if (batch.length()) {
+  if (ln) {
+    String batch = String(local);
     batch.replace("\n", ";");
     int p = 0;
     while (p < (int)batch.length()) {
@@ -398,7 +477,7 @@ static void genLoop() {
     }
   }
 
-  // 5) Banner ausblenden, Status senden
+  // 6) Banner ausblenden, Status senden
   if (genBannerUntil && now > genBannerUntil && !genActive && !genArmed) genHideBanner();
   if (now - genStatusMs >= GEN_STATUS_MS) {
     genStatusMs = now;
@@ -409,17 +488,33 @@ static void genLoop() {
   genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
 }
 
-// Nach dem Screen-switch aufrufen: erkennt Hand-Aenderungen (Encoder/Slider)
+// ---------------------------------------------------------------- loop-Teil 2
+// Nach dem Screen-switch: Hand-Aenderungen erkennen und auf die Grenzen kappen
 static void genPostLoop() {
+  genHwMx = false;
   if (!genActive) return;
   uint8_t ov = genOv;
-  if (speed != genSnapS) ov |= 1;
-  if (depth != genSnapD) ov |= 2;
-  if (stroke != genSnapH) ov |= 4;
+  bool capped = false;
+  if (speed != genSnapS) {
+    ov |= 1;
+    if (speed > genLimS) { speed = genLimS; SendCommand(SPEED, speed, OSSM_ID); capped = true; }
+  }
+  if (depth != genSnapD) {
+    ov |= 2;
+    if (depth > genLimD) { depth = genLimD; capped = true; }
+    if (stroke > depth) stroke = depth;
+    if (capped) { SendCommand(DEPTH, depth, OSSM_ID); SendCommand(STROKE, stroke, OSSM_ID); }
+  }
+  if (stroke != genSnapH) {
+    ov |= 4;
+    float hmax = min(genLimH, depth);
+    if (stroke > hmax) { stroke = hmax; SendCommand(STROKE, stroke, OSSM_ID); SendCommand(DEPTH, depth, OSSM_ID); capped = true; }
+  }
   if (sensation != genSnapX) ov |= 8;
+  if (capped) { genReason = "Grenze erreicht"; vibrate(255, 60); }
   if (ov != genOv) {
     genOv = ov;
-    genReason = "Hand-Wert bis Blockende";
+    if (!capped) genReason = "Hand-Wert bis Blockende";
     LogDebugFormatted("[GEN] Hand-Werte: %d\n", (int)genOv);
   }
   genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
