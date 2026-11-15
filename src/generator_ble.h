@@ -1,5 +1,5 @@
 // =====================================================================
-//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen5
+//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen7
 //
 //  iPhone (Bluefy + Generator-Seite)  --BLE-->  M5  --ESP-NOW-->  OSSM-Stroke
 //
@@ -16,8 +16,8 @@
 //   - Encoder/Slider hoch und runter erlaubt; Hand-Wert gilt bis zum naechsten
 //     Block (BLK). Hand-Werte werden auf die Grenzen (LIM) gekappt.
 //   - Linke/rechte Taste und linkes/rechtes Display-Feld werden ignoriert.
-//   - Verbindung weg / Lebenszeichen 2 s weg: Generator aus, Speed in 5 s
-//     sanft auf 30 (Tiefe/Hub bleiben), Maschine laeuft langsam weiter bis
+//   - Verbindung weg / Lebenszeichen 2 s weg: Generator aus, Sensation sofort 0,
+//     Speed in 5 s sanft auf 30 (Tiefe/Hub bleiben), Maschine laeuft langsam weiter bis
 //     Eingriff an der M5. Weitermachen: iPhone fragt neu an + Bestaetigen.
 //   - Home-Screen verlassen / OSSM entkoppelt / GEN:0: Maschine AUS.
 //   - Einfrier-Schutz: das ESP-NOW-Lebenszeichen an die OSSM geht nur raus,
@@ -168,6 +168,8 @@ static void genSoftLoss(const char* reason) {
   genReason = reason;
   if (!wasOn) { genHideBanner(); return; }
   vibrate(255, 300);
+  // gen7: Sensation sofort auf 0, damit auch langsame Stoesse nicht hart bleiben
+  if (sensation != 0) { sensation = 0; SendCommand(SENSATION, sensation, OSSM_ID); }
   if (!wasHold && speed > GEN_SOFT_SPEED) {
     genSoft = true;
     genSoftFrom = speed;
