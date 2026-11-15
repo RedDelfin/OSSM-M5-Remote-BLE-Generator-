@@ -4,6 +4,8 @@
 The idear of this project was, the abbility to generate the values via html script / generator. This generator is played via phone und bluefy. 
 The phone communicatis via BLE with the M5 and the M5 communicates via ESP Now with the OSSM and Stroke Ossm firmware. 
 
+At the moment it just works with Core2 
+
 
 ## Overview of the OSSM-M5-Remote
 
