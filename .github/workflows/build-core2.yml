@@ -22,8 +22,13 @@ jobs:
         run: pip install --upgrade platformio
       - name: Firmware bauen (Core2)
         run: pio run -e m5stack-core2
+      - name: Datei benennen
+        run: |
+          mkdir -p out
+          cp .pio/build/m5stack-core2/merged-flash.bin out/OSSM-M5-Remote_core2_2-2-0-gen1_FLASH-AT-0x0.bin
+          md5sum out/*.bin
       - name: Firmware hochladen
         uses: actions/upload-artifact@v4
         with:
           name: M5-Core2-Generator-Firmware
-          path: build/firmware/*core2*
+          path: out/*.bin
