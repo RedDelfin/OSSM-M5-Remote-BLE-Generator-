@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>M5 Generator – BLE-Test</title>
+<style>
+:root{--bg:#faf7fa;--fg:#1d1720;--mut:#6b6170;--card:#fff;--bd:#e4dbe6;--ac:#7b2f8e;--red:#c62828;--grn:#2e7d32;--org:#ef6c00}
+*{box-sizing:border-box}
+body{margin:0;padding:calc(env(safe-area-inset-top) + 10px) 12px calc(env(safe-area-inset-bottom) + 90px);font:15px -apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--fg)}
+h1{font-size:19px;margin:4px 0 10px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px;margin-bottom:10px}
+.k{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.v{font-size:17px;font-weight:600}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;text-align:center}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px 14px;background:var(--ac);color:#fff;cursor:pointer}
+button.sec{background:#efe7f1;color:var(--fg)}
+button:disabled{opacity:.4}
+input,select{font:inherit;font-size:16px;padding:8px;border:1px solid var(--bd);border-radius:8px;width:84px;background:#fff}
+select{width:auto}
+.ctl{display:grid;grid-template-columns:84px 44px 84px 44px 1fr;gap:6px;align-items:center;margin:6px 0}
+.ctl button{padding:10px 0}
+#stop{position:fixed;left:12px;right:12px;bottom:calc(env(safe-area-inset-bottom) + 10px);background:var(--red);font-size:22px;padding:18px;border-radius:14px;box-shadow:0 4px 14px rgba(0,0,0,.25);z-index:9}
+.pill{display:inline-block;padding:3px 9px;border-radius:99px;font-size:13px;font-weight:600;background:#eee}
+.on{background:#e3f4e4;color:var(--grn)}.off{background:#fde7e7;color:var(--red)}.wait{background:#fff1e0;color:var(--org)}
+#log{font:12px ui-monospace,Menlo,monospace;white-space:pre-wrap;max-height:180px;overflow:auto;color:var(--mut)}
+.warn{border-color:var(--red)}
+.mut{color:var(--mut);font-size:13px}
+</style>
+</head>
+<body>
+<h1>M5 Generator – BLE-Test</h1>
+
+<div class="card warn mut" id="nobt" hidden><b>Kein Web Bluetooth.</b> Auf dem iPhone diese Seite in der App <b>Bluefy</b> öffnen (Safari kann kein Bluetooth). Am PC: Chrome oder Edge.</div>
+
+<div class="card">
+ <div class="row" style="justify-content:space-between">
+  <div><div class="k">Verbindung</div><span class="pill off" id="conn">getrennt</span></div>
+  <div><div class="k">Generator</div><span class="pill off" id="gen">aus</span></div>
+  <div><div class="k">Maschine</div><span class="pill off" id="mon">aus</span></div>
+ </div>
+ <div class="row" style="margin-top:10px">
+  <button id="bConn">Verbinden</button>
+  <button class="sec" id="bDisc" disabled>Trennen</button>
+ </div>
+ <div class="mut" id="reason" style="margin-top:8px"></div>
+</div>
+
+<div class="card">
+ <div class="k">Werte laut M5</div>
+ <div class="grid" style="margin-top:6px">
+  <div><div class="k">Speed</div><div class="v" id="vs">–</div></div>
+  <div><div class="k">Tiefe</div><div class="v" id="vd">–</div></div>
+  <div><div class="k">Hub</div><div class="v" id="vh">–</div></div>
+  <div><div class="k">Sensation</div><div class="v" id="vx">–</div></div>
+ </div>
+ <div class="mut" style="margin-top:6px" id="lims">Grenzen Maschine: –</div>
+</div>
+
+<div class="card">
+ <div class="k">1 · Grenzen für den Test (vor dem Start)</div>
+ <div class="row" style="margin-top:6px">
+  <label>Speed <input type="number" id="lS" value="40" min="1"></label>
+  <label>Tiefe <input type="number" id="lD" value="20" min="1"></label>
+  <label>Hub <input type="number" id="lH" value="15" min="1"></label>
+ </div>
+ <div class="mut" style="margin-top:6px">Die M5 kappt alles darüber. Während der Generator aktiv ist, lassen sich die Grenzen nicht ändern.</div>
+</div>
+
+<div class="card">
+ <div class="k">2 · Generator starten</div>
+ <div class="mut" style="margin:6px 0">M5 muss gekoppelt sein und im Home-Screen stehen. Nach „Anfragen“ an der M5 die <b>Mitte-Taste</b> drücken.</div>
+ <div class="row">
+  <button id="bArm" disabled>Anfragen</button>
+  <button class="sec" id="bEnd" disabled>Beenden</button>
+ </div>
+</div>
+
+<div class="card">
+ <div class="k">3 · Werte senden</div>
+ <div class="mut" style="margin:6px 0">Erst Werte setzen, dann „Maschine AN“. Mit niedrigen Werten anfangen.</div>
+ <div class="ctl"><b>Speed</b><button class="sec" data-d="s:-5">−5</button><input type="number" id="iS" value="15"><button class="sec" data-d="s:5">+5</button><button data-send="S">Senden</button></div>
+ <div class="ctl"><b>Tiefe</b><button class="sec" data-d="d:-2">−2</button><input type="number" id="iD" value="10"><button class="sec" data-d="d:2">+2</button><button data-send="D">Senden</button></div>
+ <div class="ctl"><b>Hub</b><button class="sec" data-d="h:-2">−2</button><input type="number" id="iH" value="5"><button class="sec" data-d="h:2">+2</button><button data-send="H">Senden</button></div>
+ <div class="ctl"><b>Sensation</b><button class="sec" data-d="x:-10">−10</button><input type="number" id="iX" value="0"><button class="sec" data-d="x:10">+10</button><button data-send="X">Senden</button></div>
+ <div class="row" style="margin:8px 0">
+  <b>Pattern</b>
+  <select id="iP">
+   <option value="0">Simple Stroke</option><option value="1">Teasing or Pounding</option><option value="2">Robo Stroke</option>
+   <option value="3">Half'n'Half</option><option value="4">Deeper</option><option value="5">Stop'n'Go</option>
+   <option value="6">Insist</option><option value="7">Knot</option>
+  </select>
+  <button data-send="P">Senden</button>
+ </div>
+ <div class="row">
+  <button id="bOn" style="background:var(--grn)" disabled>Maschine AN</button>
+  <button class="sec" id="bOff" disabled>Maschine AUS</button>
+ </div>
+</div>
+
+<div class="card">
+ <div class="k">4 · Sicherheitstests</div>
+ <div class="mut" style="margin:6px 0">Jeweils bei laufender Maschine mit niedrigem Speed testen:</div>
+ <div class="mut">a) <b>Lebenszeichen aus</b>: M5 muss nach ca. 2 s stoppen („kein Lebenszeichen“).<br>
+ b) <b>Trennen</b> oder Bluetooth am iPhone aus: M5 stoppt sofort.<br>
+ c) <b>Encoder drehen / Taste an der M5</b>: Generator aus, Maschine stoppt.<br>
+ d) <b>Bluefy in den Hintergrund</b> (Home-Taste): M5 stoppt nach ca. 2 s.</div>
+ <div class="row" style="margin-top:8px">
+  <label><input type="checkbox" id="hbOff" style="width:auto"> Lebenszeichen aus (Test a)</label>
+ </div>
+</div>
+
+<div class="card">
+ <div class="k">Protokoll</div>
+ <div id="log"></div>
+</div>
+
+<button id="stop">STOPP</button>
+
+<script>
+const SVC='6f73736d-6765-6e00-8000-00805f9b0001',CMD='6f73736d-6765-6e00-8000-00805f9b0002',ST='6f73736d-6765-6e00-8000-00805f9b0003';
+const $=id=>document.getElementById(id);
+let dev=null,cmdC=null,stC=null,hb=null,q=Promise.resolve(),last={},lastStMs=0;
+const enc=new TextEncoder(),dec=new TextDecoder();
+
+function log(t){const d=new Date().toTimeString().slice(0,8);const l=$('log');l.textContent=d+'  '+t+'\n'+l.textContent.slice(0,4000)}
+function pill(id,txt,cls){const e=$(id);e.textContent=txt;e.className='pill '+cls}
+
+// Alle Schreibzugriffe nacheinander (sonst "GATT operation already in progress")
+function write(txt){
+ if(!cmdC)return Promise.resolve(false);
+ const data=enc.encode(txt);
+ q=q.then(async()=>{
+  try{
+   if(cmdC.writeValueWithoutResponse&&txt==='PING')await cmdC.writeValueWithoutResponse(data);
+   else if(cmdC.writeValueWithResponse)await cmdC.writeValueWithResponse(data);
+   else await cmdC.writeValue(data);
+   if(txt!=='PING')log('→ '+txt);
+   return true;
+  }catch(e){log('Fehler beim Senden ('+txt+'): '+e.message);return false}
+ });
+ return q;
+}
+
+function onStatus(ev){
+ let j;try{j=JSON.parse(dec.decode(ev.target.value))}catch(e){return}
+ last=j;lastStMs=Date.now();
+ pill('gen',j.g?'AKTIV':j.a?'Mitte drücken':'aus',j.g?'on':j.a?'wait':'off');
+ pill('mon',j.on?'läuft':'aus',j.on?'on':'off');
+ $('vs').textContent=j.s;$('vd').textContent=j.d;$('vh').textContent=j.h;$('vx').textContent=j.x;
+ $('lims').textContent='Grenzen Maschine: Speed '+j.ms+' · Tiefe '+j.md+(j.ls>0?' | Test-Grenzen M5: Speed '+j.ls+' · Tiefe '+j.ld+' · Hub '+j.lh:'')+' | Akku M5 '+j.b+' %'+(j.p?'':' | OSSM NICHT gekoppelt');
+ if(j.r&&j.r!==$('reason').dataset.r){$('reason').dataset.r=j.r;$('reason').textContent='Letzte Meldung der M5: '+j.r;log('M5: '+j.r)}
+ const act=!!j.g;
+ $('bOn').disabled=!act;$('bOff').disabled=!act;
+ document.querySelectorAll('[data-send]').forEach(b=>b.disabled=!act);
+ $('bArm').disabled=act||!j.p;$('bEnd').disabled=!(act||j.a);
+}
+
+async function connect(){
+ if(!navigator.bluetooth){$('nobt').hidden=false;return}
+ try{
+  log('Suche M5 „OSSM-M5-GEN“ …');
+  dev=await navigator.bluetooth.requestDevice({filters:[{services:[SVC]},{name:'OSSM-M5-GEN'}],optionalServices:[SVC]});
+  dev.addEventListener('gattserverdisconnected',onDisc);
+  const srv=await dev.gatt.connect();
+  const s=await srv.getPrimaryService(SVC);
+  cmdC=await s.getCharacteristic(CMD);stC=await s.getCharacteristic(ST);
+  await stC.startNotifications();stC.addEventListener('characteristicvaluechanged',onStatus);
+  try{onStatus({target:{value:await stC.readValue()}})}catch(e){}
+  pill('conn','verbunden','on');$('bConn').disabled=true;$('bDisc').disabled=false;
+  log('Verbunden.');
+  startHb();wake();
+ }catch(e){log('Verbinden fehlgeschlagen: '+e.message)}
+}
+function onDisc(){
+ stopHb();cmdC=null;stC=null;q=Promise.resolve();
+ pill('conn','getrennt','off');pill('gen','aus','off');
+ $('bConn').disabled=false;$('bDisc').disabled=true;$('bArm').disabled=true;$('bEnd').disabled=true;$('bOn').disabled=true;$('bOff').disabled=true;
+ document.querySelectorAll('[data-send]').forEach(b=>b.disabled=true);
+ log('Verbindung getrennt. Die M5 stoppt die Maschine selbst.');
+}
+function startHb(){stopHb();hb=setInterval(()=>{if(!$('hbOff').checked)write('PING');if(lastStMs&&Date.now()-lastStMs>3000)log('Achtung: seit 3 s kein Status von der M5')},500)}
+function stopHb(){if(hb)clearInterval(hb);hb=null}
+
+let wl=null;async function wake(){try{if(navigator.wakeLock)wl=await navigator.wakeLock.request('screen')}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&cmdC)wake()});
+
+$('bConn').onclick=connect;
+$('bDisc').onclick=()=>{try{dev&&dev.gatt.disconnect()}catch(e){}};
+$('bArm').onclick=async()=>{
+ const l=['S','D','H'].map(k=>k+'='+Math.max(1,+$('l'+k).value||1)).join(',');
+ await write('LIM:'+l);await write('GEN:1');log('Jetzt an der M5 die Mitte-Taste drücken.');
+};
+$('bEnd').onclick=()=>write('GEN:0');
+$('bOn').onclick=()=>write('ON');
+$('bOff').onclick=()=>write('OFF');
+$('stop').onclick=async()=>{await write('OFF');await write('GEN:0');log('STOPP gesendet.')};
+document.querySelectorAll('[data-d]').forEach(b=>b.onclick=()=>{const[k,d]=b.dataset.d.split(':');const i=$('i'+k.toUpperCase());i.value=(+i.value||0)+(+d)});
+document.querySelectorAll('[data-send]').forEach(b=>{b.disabled=true;b.onclick=()=>{const k=b.dataset.send;const v=+$('i'+k).value;
+ if(k==='H'&&last.d!==undefined&&v>last.d)log('Hinweis: Hub wird auf die Tiefe begrenzt ('+last.d+').');
+ write(k+':'+(isNaN(v)?0:v))}});
+if(!navigator.bluetooth)$('nobt').hidden=false;
+log('Bereit. Erst die M5 mit der OSSM koppeln (Connect an der M5), dann hier verbinden.');
+</script>
+</body>
+</html>
