@@ -1059,6 +1059,8 @@ void loop()
       break;
 
      }
+     genPostLoop();   // Generator: Hand-Aenderungen an Encoder/Slider erkennen
+
      mxclick_long_waspressed = false;
      mxclick_short_waspressed = false;
      click2_short_waspressed = false;

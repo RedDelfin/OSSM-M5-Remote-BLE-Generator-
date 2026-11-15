@@ -7,14 +7,19 @@
 //  SendCommand()-Funktion an die OSSM, genau wie beim Drehen am Encoder.
 //  Einheiten = die Werte, die auch auf dem M5-Display stehen.
 //
-//  Sicherheit:
+//  Sicherheit / Bedienung (v2: gen2):
 //   - Aktivieren nur im Home-Screen und nur nach Bestaetigung an der M5
 //     (Mitte-Taste druecken).
-//   - Lebenszeichen: kommt 2 s lang kein Befehl/PING -> OFF + Modus aus.
-//   - BLE-Verbindung weg -> sofort OFF + Modus aus.
-//   - Jede Eingabe an der M5 (Encoder, Taste, Slider) -> OFF + Modus aus.
-//   - Grenzen (LIM) fuer Speed/Tiefe/Hub, nur senkbar, gelten zusaetzlich
-//     zu den Grenzen der Maschine.
+//   - Beenden des Generators NUR ueber die Seite (GEN:0) - oder automatisch:
+//     Lebenszeichen 2 s weg / BLE getrennt / Home-Screen verlassen -> OFF + aus.
+//   - Mitte-Taste waehrend des Generators = PAUSE (Maschine AUS, Generator
+//     bleibt aktiv). Erneut Mitte = weiter (Maschine AN). Solange pausiert,
+//     ignoriert die M5 ein ON vom iPhone.
+//   - Encoder/Slider (Speed, Tiefe, Hub, Sensation) hoch UND runter erlaubt:
+//     der Hand-Wert gilt bis zum naechsten Block (BLK), Generator-Werte fuer
+//     diesen Parameter werden bis dahin ignoriert.
+//   - Linke/rechte Taste (kurz, lang, doppelt) werden ignoriert.
+//   - Grenzen (LIM) fuer Speed/Tiefe/Hub gelten fuer Generator-Werte.
 //   - Werte werden nur angenommen, solange der Modus aktiv ist.
 //
 //  Befehle (Text, mehrere mit ';' oder Zeilenumbruch getrennt):
@@ -27,13 +32,15 @@
 //   X:<wert>         Sensation -100..100
 //   P:<index>        Pattern (0 SimpleStroke, 1 TeasingPounding, 2 RoboStroke,
 //                    3 HalfnHalf, 4 Deeper, 5 StopNGo, 6 Insist, 7 Knot)
-//   ON / OFF         Maschine an / aus
+//   ON / OFF         Maschine an / aus (ON wird bei M5-Pause ignoriert)
+//   BLK              neuer Block: Hand-Werte verfallen, Generator-Werte gelten wieder
 //   LIM:S=<v>,D=<v>,H=<v>   Grenzen setzen (nur wenn Modus nicht aktiv)
 //
 //  Status (Notify/Read, JSON), ca. alle 500 ms:
 //   {"p":gekoppelt,"g":modus,"a":wartet_auf_bestaetigung,"on":OSSM_On,
 //    "s":speed,"d":depth,"h":stroke,"x":sensation,"pt":pattern,
-//    "ms":speedlimit,"md":maxdepth,"ls":..,"ld":..,"lh":..,"r":"grund","b":akku}
+//    "ms":speedlimit,"md":maxdepth,"ls":..,"ld":..,"lh":..,"r":"grund","b":akku,
+//    "hold":Pause_an_M5,"ov":Hand-Bitmaske(1 Speed,2 Tiefe,4 Hub,8 Sensation)}
 // =====================================================================
 #pragma once
 #include <NimBLEDevice.h>
@@ -64,6 +71,9 @@ static uint32_t genStatusMs = 0;
 static uint32_t genBannerUntil = 0;
 static String genReason = "";
 static float genLimS = 1e9, genLimD = 1e9, genLimH = 1e9;
+static bool genHold = false;            // Pause per Mitte-Taste
+static uint8_t genOv = 0;               // Hand-Werte im aktuellen Block
+static float genSnapS = 0, genSnapD = 0, genSnapH = 0, genSnapX = 0;
 
 static NimBLECharacteristic* genStChr = nullptr;
 static lv_obj_t* genBanner = nullptr;
@@ -113,6 +123,8 @@ static void genAbort(const char* reason) {
   bool wasOn = genActive;
   genActive = false;
   genArmed = false;
+  genHold = false;
+  genOv = 0;
   genReason = reason;
   if (wasOn) {
     SendCommand(OFF, 0.0, OSSM_ID);
@@ -223,7 +235,11 @@ static void genHandleOne(String c) {
 
   if (!genActive) return;  // Bewegungsbefehle nur im aktiven Modus
 
-  if (u == "ON")  { SendCommand(ON, 0.0, OSSM_ID); return; }
+  if (u == "BLK") { genOv = 0; return; }
+  if (u == "ON")  {
+    if (genHold) { genReason = "an der M5 pausiert"; return; }
+    SendCommand(ON, 0.0, OSSM_ID); return;
+  }
   if (u == "OFF") { SendCommand(OFF, 0.0, OSSM_ID); return; }
 
   int q = u.indexOf(':');
@@ -233,21 +249,25 @@ static void genHandleOne(String c) {
 
   switch (k) {
     case 'S':
+      if (genOv & 1) break;
       speed = genClamp(v, 0, min(speedlimit, genLimS));
       SendCommand(SPEED, speed, OSSM_ID);
       break;
     case 'D':
+      if (genOv & 2) break;
       depth = genClamp(v, 0, min(maxdepthinmm, genLimD));
       if (stroke > depth) stroke = depth;
       SendCommand(DEPTH, depth, OSSM_ID);
       SendCommand(STROKE, stroke, OSSM_ID);
       break;
     case 'H':
+      if (genOv & 4) break;
       stroke = genClamp(v, 0, min(min(maxdepthinmm, genLimH), depth));
       SendCommand(STROKE, stroke, OSSM_ID);
       SendCommand(DEPTH, depth, OSSM_ID);
       break;
     case 'X':
+      if (genOv & 8) break;
       sensation = genClamp(v, -100, 100);
       SendCommand(SENSATION, sensation, OSSM_ID);
       break;
@@ -259,14 +279,15 @@ static void genHandleOne(String c) {
 
 static void genSendStatus() {
   if (!genStChr) return;
-  char buf[260];
+  char buf[300];
   snprintf(buf, sizeof(buf),
            "{\"p\":%d,\"g\":%d,\"a\":%d,\"on\":%d,\"s\":%.0f,\"d\":%.0f,\"h\":%.0f,\"x\":%.0f,"
-           "\"pt\":%d,\"ms\":%.0f,\"md\":%.0f,\"ls\":%.0f,\"ld\":%.0f,\"lh\":%.0f,\"r\":\"%s\",\"b\":%d}",
+           "\"pt\":%d,\"ms\":%.0f,\"md\":%.0f,\"ls\":%.0f,\"ld\":%.0f,\"lh\":%.0f,\"r\":\"%s\",\"b\":%d,"
+           "\"hold\":%d,\"ov\":%d}",
            Ossm_paired ? 1 : 0, genActive ? 1 : 0, genArmed ? 1 : 0, OSSM_On ? 1 : 0,
            speed, depth, stroke, sensation, pattern, speedlimit, maxdepthinmm,
            genLimS > 1e8 ? -1.0f : genLimS, genLimD > 1e8 ? -1.0f : genLimD, genLimH > 1e8 ? -1.0f : genLimH,
-           genReason.c_str(), (int)M5.Power.getBatteryLevel());
+           genReason.c_str(), (int)M5.Power.getBatteryLevel(), genHold ? 1 : 0, (int)genOv);
   genStChr->setValue((uint8_t*)buf, strlen(buf));
   if (genBleConnected) genStChr->notify();
 }
@@ -294,7 +315,10 @@ static void genLoop() {
         genActive = true;
         genLastRxMs = now;
         genReason = "";
-        genShowBanner("GENERATOR AKTIV - jede Eingabe stoppt", 0xC62828, 0);
+        genHold = false;
+        genOv = 0;
+        genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
+        genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
       } else {
         genAbort("Start nicht moeglich");
       }
@@ -309,23 +333,29 @@ static void genLoop() {
     }
   }
 
-  // 3) Eingabe an der M5 beendet den Modus
+  // 3) Bedienung an der M5 waehrend des Generators
   if (genActive) {
-    bool input =
-        abs(encoder1.getCount()) >= 2 || abs(encoder2.getCount()) >= 2 ||
-        abs(encoder3.getCount()) >= 2 || abs(encoder4.getCount()) >= 2 ||
-        mxclick_short_waspressed || mxclick_long_waspressed ||
-        click2_short_waspressed || click3_short_waspressed ||
-        click3_long_waspressed || click3_double_waspressed ||
-        lv_slider_is_dragged(ui_homespeedslider) || lv_slider_is_dragged(ui_homedepthslider) ||
-        lv_slider_is_dragged(ui_homestrokeslider) || lv_slider_is_dragged(ui_homesensationslider);
-    if (input) {
-      // Tastendruecke verbrauchen, damit sie nicht zusaetzlich ON/OFF toggeln
+    if (mxclick_short_waspressed) {            // Mitte = Pause / weiter
       mxclick_short_waspressed = false;
-      click2_short_waspressed = false;
-      click3_short_waspressed = false;
-      genAbort("Eingabe an der M5");
-    } else if (st_screens != ST_UI_HOME) {
+      genHold = !genHold;
+      if (genHold) {
+        SendCommand(OFF, 0.0, OSSM_ID);
+        genReason = "Pause an der M5";
+        genShowBanner("PAUSE (M5) - Mitte = weiter", 0xEF6C00, 0);
+      } else {
+        SendCommand(ON, 0.0, OSSM_ID);
+        genReason = "weiter an der M5";
+        genShowBanner("GENERATOR AKTIV - Mitte = Pause", 0xC62828, 0);
+      }
+    }
+    // linke/rechte Taste ignorieren (kein Menue, kein Eject, kein Sensation-Reset)
+    mxclick_long_waspressed = false;
+    click2_short_waspressed = false;
+    click3_short_waspressed = false;
+    click3_long_waspressed = false;
+    click3_double_waspressed = false;
+
+    if (st_screens != ST_UI_HOME) {
       genAbort("Home-Screen verlassen");
     } else if (!Ossm_paired) {
       genAbort("OSSM nicht gekoppelt");
@@ -361,4 +391,23 @@ static void genLoop() {
     genStatusMs = now;
     genSendStatus();
   }
+
+  // Stand nach den Generator-Werten merken; was sich danach aendert, kam von Hand
+  genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
+}
+
+// Nach dem Screen-switch aufrufen: erkennt Hand-Aenderungen (Encoder/Slider)
+static void genPostLoop() {
+  if (!genActive) return;
+  uint8_t ov = genOv;
+  if (speed != genSnapS) ov |= 1;
+  if (depth != genSnapD) ov |= 2;
+  if (stroke != genSnapH) ov |= 4;
+  if (sensation != genSnapX) ov |= 8;
+  if (ov != genOv) {
+    genOv = ov;
+    genReason = "Hand-Wert bis Blockende";
+    LogDebugFormatted("[GEN] Hand-Werte: %d\n", (int)genOv);
+  }
+  genSnapS = speed; genSnapD = depth; genSnapH = stroke; genSnapX = sensation;
 }
