@@ -1,0 +1,29 @@
+name: Build M5 Core2 (Generator)
+
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+      - name: PlatformIO installieren
+        run: pip install --upgrade platformio
+      - name: Firmware bauen (Core2)
+        run: pio run -e m5stack-core2
+      - name: Firmware hochladen
+        uses: actions/upload-artifact@v4
+        with:
+          name: M5-Core2-Generator-Firmware
+          path: build/firmware/*core2*

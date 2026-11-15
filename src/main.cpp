@@ -393,6 +393,8 @@ bool SendCommand(int Command, float Value, int Target){
   }
 }
 
+#include "generator_ble.h"   // Generator-Modus (BLE vom iPhone)
+
 void connectbutton(lv_event_t * e)
 {
     if(!Ossm_paired){
@@ -624,7 +626,7 @@ void setup(){
   lv_roller_get_selected_str(ui_PatternS,patternstr,0);
   lv_label_set_text(ui_HomePatternLabel,patternstr);
 
-
+  genSetup();   // Generator-Banner anlegen (BLE startet erst nach ESP-NOW-Kopplung)
 }
 
 void loop()
@@ -651,6 +653,8 @@ void loop()
      Button1.tick();
      Button2.tick();
      Button3.tick();
+
+     genLoop();   // Generator-Modus: Sicherheitspruefungen + BLE-Befehle (vor dem switch!)
 
      switch(st_screens){
       
