@@ -1,8 +1,9 @@
-name: Release (Tag gen*)
+name: Release (Branch release/<tag>)
 
+# Tag-Pushes sind über den Claude-Proxy nicht erlaubt; daher Auslösung per Branch release/<tag>.
 on:
   push:
-    tags: ["gen*"]
+    branches: ["release/**"]
 
 permissions:
   contents: write
@@ -12,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Tag-Name aus Branch
+        run: echo "TAG=${GITHUB_REF_NAME#release/}" >> "$GITHUB_ENV"
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
@@ -22,13 +25,13 @@ jobs:
       - name: Datei benennen
         run: |
           mkdir -p out
-          cp .pio/build/m5stack-core2/merged-flash.bin "out/OSSM-M5-Remote_core2_2-2-0-${GITHUB_REF_NAME}_FLASH-AT-0x0.bin"
+          cp .pio/build/m5stack-core2/merged-flash.bin "out/OSSM-M5-Remote_core2_2-2-0-${TAG}_FLASH-AT-0x0.bin"
           md5sum out/*.bin > out/md5.txt
           cat out/md5.txt
       - name: Release anlegen
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" out/*.bin out/md5.txt \
-            --title "M5 Generator $GITHUB_REF_NAME (ESP-NOW, für OSSM-Stroke)" \
+          gh release create "$TAG" out --target "$GITHUB_SHA"/*.bin out/md5.txt \
+            --title "M5 Generator $TAG (ESP-NOW, für OSSM-Stroke)" \
             --notes "Rückweg-Stand der M5-Firmware für OSSM-Stroke (ESP-NOW). Flashen: merged-flash.bin mit esptool-js an Adresse 0x0. Nachfolger für Stock-Firmware: RedDelfin/M5-BLE-Gen-stock."
