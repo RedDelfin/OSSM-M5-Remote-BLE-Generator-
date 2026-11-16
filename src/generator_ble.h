@@ -1,5 +1,5 @@
 // =====================================================================
-//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen8
+//  Generator-Modus (BLE) fuer die OSSM-M5-Remote (Ortlof v2.2.0)  -  gen9
 //
 //  iPhone (Bluefy + Generator-Seite)  --BLE-->  M5  --ESP-NOW-->  OSSM-Stroke
 //

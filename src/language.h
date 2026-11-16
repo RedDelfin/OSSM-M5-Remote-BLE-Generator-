@@ -14,7 +14,7 @@
 #define T_HOME              "Home"
 #define T_MEN1              "Up"
 #define T_MEN2              "Down"
-#define T_SPEED             "Speed:"
+#define T_SPEED             "BPM:"
 #define T_DEPTH             "Depth:"
 #define T_MM                " mm"
 #define T_STROKE            "Stroke:"
